@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE project>
+<project basedir=".">
+    <target name="-prepare">
+        <property name="maven.home" value="${basedir}/builder/maven" />
+        <property name="maven.local.repository" value="${user.dir}/.m2/repository" />
+        <available file="${maven.home}" property="maven.exists"></available>
+        <available file="settings.xml" property="custom.settings.file.exists" />
+    </target>
+
+    <!-- settings xml related -->
+    <target name="-set-custom-settings-file" depends="-prepare" if="${custom.settings.file.exists}">
+        <property name="maven.settings.xml" value="settings.xml"></property>
+    </target>
+    <target name="-set-default-settings-file" depends="-prepare" unless="${custom.settings.file.exists}">
+        <property name="maven.settings.xml" value="${maven.home}/conf/settings.xml"></property>
+    </target>
+    <target name="-set-settings.xml" depends="-prepare,-set-custom-settings-file,-set-default-settings-file" />
+
+    <target name="-download-maven" depends="-prepare" unless="${maven.exists}">
+        <get src="http://mirror.yannic-bonenberger.com/apache/maven/maven-3/3.3.9/binaries/apache-maven-3.3.9-bin.zip" dest="maven.zip"/>
+        <unzip src="maven.zip" dest="maven" />
+        <delete file="maven.zip" />
+        <move file="maven/apache-maven-3.3.9" tofile="${maven.home}" />
+        <delete dir="maven" />
+    </target>
+
+    <!-- example call
+    ant load -Dgroup=de.ejbbuch -Dartifact=ticket2rock -Dversion=2.0 -Dtype=war
+    ant load -Dgroup=org.jboss.weld.servlet -Dartifact=weld-servlet-core -Dversion=2.3.4.Final
+    -->
+    <target name="load" description="Load maven dependencies" depends="-prepare,-download-maven,-set-settings.xml">
+        <property name="group"    value="foo"/>
+        <property name="artifact" value="bar"/>
+        <property name="version"  value="0.0.1-SNAPSHOT"/>
+        <property name="type"     value="jar"/>
+        <property name="to"       value="${basedir}/dependencies" />
+        <echoxml file="pom.xml">
+            <project>
+
+                <modelVersion>4.0.0</modelVersion>
+                <groupId>tmp-project</groupId>
+                <artifactId>tmp-project</artifactId>
+                <version>0.1</version>
+
+                <properties>
+                    <maven.compiler.source>1.8</maven.compiler.source>
+                    <maven.compiler.target>1.8</maven.compiler.target>
+                    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+                    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+                </properties>
+
+                <dependencies>
+                    <dependency>
+                        <groupId>${group}</groupId>
+                        <artifactId>${artifact}</artifactId>
+                        <version>${version}</version>
+                        <type>${type}</type>
+                    </dependency>
+                </dependencies>
+
+                <build>
+                    <plugins>
+                        <plugin>
+                            <groupId>org.apache.maven.plugins</groupId>
+                            <artifactId>maven-dependency-plugin</artifactId>
+                            <version>2.10</version>
+                            <executions>
+                                <execution>
+                                    <id>copy-dependencies</id>
+                                    <phase>validate</phase>
+                                    <goals>
+                                        <goal>copy-dependencies</goal>
+                                    </goals>
+                                </execution>
+                            </executions>
+                        </plugin>
+                    </plugins>
+                </build>
+            </project>
+        </echoxml>
+        <exec executable="java" errorproperty="errors.messages" failonerror="false">
+            <env key="M2_HOME" value="${maven.home}"/>
+            <arg value="-classpath" />
+            <arg value="${maven.home}/boot/plexus-classworlds-2.5.2.jar" />
+            <arg value="-Dclassworlds.conf=${maven.home}/bin/m2.conf"/>
+            <arg value="-Dmaven.home=${maven.home}"/>
+            <arg value="-Dmaven.multiModuleProjectDirectory=${basedir}" />
+            <arg value="org.codehaus.plexus.classworlds.launcher.Launcher" />
+            <arg value="-s"/>
+            <arg value="${maven.settings.xml}"/>
+            <arg value="verify"/>
+        </exec>
+        <echo>${errors.messages}</echo>
+        <copy todir="dependencies">
+            <fileset dir="target/dependency" includes="*"/>
+        </copy>
+        <delete file="pom.xml" />
+        <delete dir="target" />
+    </target>
+
+</project>
